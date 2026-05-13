@@ -1,3 +1,5 @@
+import logging
+
 from agents import function_tool
 
 from app.models import ArticleCreate
@@ -7,6 +9,8 @@ from app.services.database_service import (
     save_article_summary,
 )
 from app.services.whatsapp import WhatsAppClient
+
+logger = logging.getLogger(__name__)
 
 
 def _whatsapp_message(title: str, source: str, summary: str) -> str:
@@ -44,17 +48,23 @@ def save_article_summary_record(
     image: str = "",
     source_url: str | None = None,
 ) -> dict[str, int | str | bool]:
-    article = save_article_summary(
-        ArticleCreate(
-            title=title,
-            source=source,
-            source_url=source_url,
-            summary=summary,
-            full_text=full_text,
-            date=date,
-            image=image,
+    logger.info("Saving article summary through agent tool: source=%s title=%s", source, title)
+    try:
+        article = save_article_summary(
+            ArticleCreate(
+                title=title,
+                source=source,
+                source_url=source_url,
+                summary=summary,
+                full_text=full_text,
+                date=date,
+                image=image,
+            )
         )
-    )
+    except Exception:
+        logger.error("Failed to save article summary through agent tool: source=%s title=%s", source, title, exc_info=True)
+        raise
+    logger.info("Saved article summary through agent tool: article_id=%s", article.id)
     return {
         "saved": True,
         "article_id": article.id,
@@ -85,19 +95,48 @@ async def send_whatsapp_summary(
     source: str,
     summary: str,
 ) -> dict[str, int]:
-    recipients = get_pending_whatsapp_recipients(article_id)
+    logger.info("Sending WhatsApp summary through agent tool: article_id=%s", article_id)
+    try:
+        recipients = get_pending_whatsapp_recipients(article_id)
+    except Exception:
+        logger.error("Failed to load WhatsApp recipients through agent tool: article_id=%s", article_id, exc_info=True)
+        raise
     whatsapp_client = WhatsAppClient()
     sent_count = 0
 
     for recipient in recipients:
-        sent = await whatsapp_client.send_text(
-            recipient.whatsapp_number,
-            _whatsapp_message(title, source, summary),
-        )
+        try:
+            sent = await whatsapp_client.send_text(
+                recipient.whatsapp_number,
+                _whatsapp_message(title, source, summary),
+            )
+        except Exception:
+            logger.error(
+                "Failed to send WhatsApp summary through agent tool: article_id=%s subscriber_id=%s",
+                article_id,
+                recipient.id,
+                exc_info=True,
+            )
+            raise
         if sent:
-            mark_whatsapp_summary_sent(article_id, recipient.id)
+            try:
+                mark_whatsapp_summary_sent(article_id, recipient.id)
+            except Exception:
+                logger.error(
+                    "Failed to mark WhatsApp summary sent through agent tool: article_id=%s subscriber_id=%s",
+                    article_id,
+                    recipient.id,
+                    exc_info=True,
+                )
+                raise
             sent_count += 1
 
+    logger.info(
+        "Sent WhatsApp summary through agent tool: article_id=%s recipients=%s messages_sent=%s",
+        article_id,
+        len(recipients),
+        sent_count,
+    )
     return {
         "article_id": article_id,
         "recipients_found": len(recipients),

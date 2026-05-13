@@ -1,9 +1,12 @@
 import json
+import logging
 import os
 from dataclasses import dataclass
 from typing import Any
 
 from app.agents.mcp_servers import create_browser_agent_mcp_servers
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -26,9 +29,11 @@ def _documents_from_json(value: str, limit: int) -> list[RetrievedDocument]:
     try:
         payload = json.loads(value)
     except json.JSONDecodeError:
+        logger.error("Browser agent returned invalid JSON document payload", exc_info=True)
         return []
 
     if not isinstance(payload, list):
+        logger.error("Browser agent returned non-list document payload")
         return []
 
     documents: list[RetrievedDocument] = []
@@ -40,6 +45,7 @@ def _documents_from_json(value: str, limit: int) -> list[RetrievedDocument]:
             documents.append(document)
         if len(documents) == limit:
             break
+    logger.info("Parsed browser agent documents: count=%s", len(documents))
     return documents
 
 
@@ -52,6 +58,7 @@ def _document_from_mapping(item: dict[str, Any]) -> RetrievedDocument | None:
     full_text = str(item.get("full_text", "")).strip()
 
     if not title or not source or not source_url or not full_text:
+        logger.error("Browser agent document is missing required fields")
         return None
 
     return RetrievedDocument(
@@ -65,47 +72,60 @@ def _document_from_mapping(item: dict[str, Any]) -> RetrievedDocument | None:
 
 
 async def retrieve_latest_documents(source_urls: tuple[str, ...], limit: int = 5) -> list[RetrievedDocument]:
-    if not source_urls or not os.getenv("OPENAI_API_KEY"):
+    if not source_urls:
+        logger.info("No source URLs configured for browser agent retrieval")
+        return []
+    if not os.getenv("OPENAI_API_KEY"):
+        logger.info("OPENAI_API_KEY is not configured; browser agent retrieval skipped")
         return []
 
     try:
         from agents import Agent, Runner
         from agents.mcp import MCPServerManager
     except ImportError:
+        logger.error("OpenAI Agents SDK is unavailable; browser agent retrieval skipped", exc_info=True)
         return []
 
+    logger.info("Starting browser agent retrieval: sources=%s limit=%s", len(source_urls), limit)
     mcp_servers = create_browser_agent_mcp_servers(timeout_seconds=90)
-    async with MCPServerManager(
-        mcp_servers,
-        connect_timeout_seconds=60,
-        cleanup_timeout_seconds=20,
-        drop_failed_servers=True,
-        strict=False,
-        connect_in_parallel=True,
-    ) as manager:
-        agent = Agent(
-            name="Civic Pulse Browser Agent",
-            instructions=(
-                "You retrieve Kenyan civic source documents for Civic Pulse. Use Playwright MCP tools "
-                "to browse source websites and identify the latest reports, bills, or acts. Use the "
-                "PDF Reader MCP tools whenever a selected item is a PDF or a downloaded PDF file. "
-                "Return only a valid JSON array. Each object must contain: title, source, source_url, "
-                "date, image, and full_text. The full_text must contain the substantive document text "
-                "needed for a separate summarizer agent. Return no markdown and no commentary."
-            ),
-            mcp_servers=manager.active_servers,
-            mcp_config={
-                "convert_schemas_to_strict": True,
-                "include_server_in_tool_names": True,
-            },
-        )
-        prompt = (
-            f"Retrieve the latest {limit} reports, bills, or acts from these sources:\n"
-            f"{json.dumps(list(source_urls), ensure_ascii=True)}\n\n"
-            "Prefer the most recent items shown by the source website. Include the original source URL "
-            "for each item. If an image is unavailable, use an empty string. If a date is unavailable, "
-            "use an empty string. Return at most the requested number of items."
-        )
-        result = await Runner.run(agent, prompt)
+    try:
+        async with MCPServerManager(
+            mcp_servers,
+            connect_timeout_seconds=60,
+            cleanup_timeout_seconds=20,
+            drop_failed_servers=True,
+            strict=False,
+            connect_in_parallel=True,
+        ) as manager:
+            logger.info("Browser agent MCP servers active: count=%s", len(manager.active_servers))
+            agent = Agent(
+                name="Civic Pulse Browser Agent",
+                instructions=(
+                    "You retrieve Kenyan civic source documents for Civic Pulse. Use Playwright MCP tools "
+                    "to browse source websites and identify the latest reports, bills, or acts. Use the "
+                    "PDF Reader MCP tools whenever a selected item is a PDF or a downloaded PDF file. "
+                    "Return only a valid JSON array. Each object must contain: title, source, source_url, "
+                    "date, image, and full_text. The full_text must contain the substantive document text "
+                    "needed for a separate summarizer agent. Return no markdown and no commentary."
+                ),
+                mcp_servers=manager.active_servers,
+                mcp_config={
+                    "convert_schemas_to_strict": True,
+                    "include_server_in_tool_names": True,
+                },
+            )
+            prompt = (
+                f"Retrieve the latest {limit} reports, bills, or acts from these sources:\n"
+                f"{json.dumps(list(source_urls), ensure_ascii=True)}\n\n"
+                "Prefer the most recent items shown by the source website. Include the original source URL "
+                "for each item. If an image is unavailable, use an empty string. If a date is unavailable, "
+                "use an empty string. Return at most the requested number of items."
+            )
+            result = await Runner.run(agent, prompt)
+    except Exception:
+        logger.error("Browser agent retrieval failed", exc_info=True)
+        raise
 
-    return _documents_from_json(str(result.final_output), limit)
+    documents = _documents_from_json(str(result.final_output), limit)
+    logger.info("Completed browser agent retrieval: documents=%s", len(documents))
+    return documents
