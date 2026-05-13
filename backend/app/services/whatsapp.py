@@ -1,6 +1,10 @@
+import logging
+
 import httpx
 
 from app.config import Settings, get_settings
+
+logger = logging.getLogger(__name__)
 
 
 class WhatsAppClient:
@@ -12,8 +16,10 @@ class WhatsAppClient:
             self.settings.whatsapp_access_token
             and self.settings.whatsapp_phone_number_id
         ):
+            logger.info("WhatsApp credentials are not configured; message not sent")
             return False
 
+        logger.info("Sending WhatsApp text message: recipient=%s", recipient_number)
         url = (
             f"https://graph.facebook.com/{self.settings.whatsapp_api_version}/"
             f"{self.settings.whatsapp_phone_number_id}/messages"
@@ -25,8 +31,16 @@ class WhatsAppClient:
             "text": {"preview_url": False, "body": message},
         }
         headers = {"Authorization": f"Bearer {self.settings.whatsapp_access_token}"}
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(url, json=payload, headers=headers)
-            response.raise_for_status()
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(url, json=payload, headers=headers)
+                response.raise_for_status()
+        except Exception:
+            logger.error(
+                "Failed to send WhatsApp text message: recipient=%s",
+                recipient_number,
+                exc_info=True,
+            )
+            raise
+        logger.info("Sent WhatsApp text message: recipient=%s", recipient_number)
         return True
-
