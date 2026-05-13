@@ -21,8 +21,7 @@ class WhatsAppClient:
 
         logger.info("Sending WhatsApp text message: recipient=%s", recipient_number)
         url = (
-            f"https://graph.facebook.com/{self.settings.whatsapp_api_version}/"
-            f"{self.settings.whatsapp_phone_number_id}/messages"
+            f"https://graph.facebook.com/{self.settings.whatsapp_api_version}/{self.settings.whatsapp_phone_number_id}/messages"
         )
         payload = {
             "messaging_product": "whatsapp",
