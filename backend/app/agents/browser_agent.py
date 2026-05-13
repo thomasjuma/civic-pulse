@@ -71,12 +71,12 @@ def _document_from_mapping(item: dict[str, Any]) -> RetrievedDocument | None:
     )
 
 
-async def retrieve_latest_documents(source_urls: tuple[str, ...], limit: int = 5) -> list[RetrievedDocument]:
+async def retrieve_latest_documents(source_urls: tuple[str, ...], limit: int = 2) -> list[RetrievedDocument]:
     if not source_urls:
-        logger.info("No source URLs configured for browser agent retrieval")
+        logger.error("No source URLs configured for browser agent retrieval")
         return []
     if not os.getenv("OPENAI_API_KEY"):
-        logger.info("OPENAI_API_KEY is not configured; browser agent retrieval skipped")
+        logger.error("OPENAI_API_KEY is not configured; browser agent retrieval skipped")
         return []
 
     try:
@@ -103,14 +103,14 @@ async def retrieve_latest_documents(source_urls: tuple[str, ...], limit: int = 5
                 instructions=(
                     "You retrieve Kenyan civic source documents for Civic Pulse. Use Playwright MCP tools "
                     "to browse source websites and identify the latest reports, bills, or acts. Use the "
-                    "PDF Reader MCP tools whenever a selected item is a PDF or a downloaded PDF file. "
+                    "PDF Reader MCP tools whenever a selected item is a PDF available at a URL. "
                     "Return only a valid JSON array. Each object must contain: title, source, source_url, "
                     "date, image, and full_text. The full_text must contain the substantive document text "
                     "needed for a separate summarizer agent. Return no markdown and no commentary."
                 ),
                 mcp_servers=manager.active_servers,
                 mcp_config={
-                    "convert_schemas_to_strict": True,
+                    "convert_schemas_to_strict": False,
                     "include_server_in_tool_names": True,
                 },
             )
@@ -121,7 +121,7 @@ async def retrieve_latest_documents(source_urls: tuple[str, ...], limit: int = 5
                 "for each item. If an image is unavailable, use an empty string. If a date is unavailable, "
                 "use an empty string. Return at most the requested number of items."
             )
-            result = await Runner.run(agent, prompt)
+            result = await Runner.run(agent, prompt, max_turns=20)
     except Exception:
         logger.error("Browser agent retrieval failed", exc_info=True)
         raise

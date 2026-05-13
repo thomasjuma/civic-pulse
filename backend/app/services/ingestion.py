@@ -13,7 +13,7 @@ async def run_ingestion() -> IngestionResult:
     source_urls = tuple(str(url) for url in settings.source_urls)
     logger.info("Starting ingestion run: sources=%s", len(source_urls))
     try:
-        documents = await retrieve_latest_documents(source_urls, limit=5)
+        documents = await retrieve_latest_documents(source_urls, limit=2)
     except Exception:
         logger.error("Failed to retrieve latest documents", exc_info=True)
         raise

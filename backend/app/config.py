@@ -13,7 +13,8 @@ class Settings(BaseSettings):
     whatsapp_phone_number_id: str | None = Field(default=None, alias="WHATSAPP_PHONE_NUMBER_ID")
     whatsapp_api_version: str = Field(default="v20.0", alias="WHATSAPP_API_VERSION")
     database_path: Path = Field(default=Path("civic_pulse.db"), alias="DATABASE_PATH")
-    summary_job_interval_minutes: int = Field(default=1440, alias="SUMMARY_JOB_INTERVAL_MINUTES")
+    log_level: str = Field(default="INFO", alias="LOG_LEVEL")
+    summary_job_interval_minutes: int = Field(default=1, alias="SUMMARY_JOB_INTERVAL_MINUTES")
     summary_job_run_on_startup: bool = Field(default=False, alias="SUMMARY_JOB_RUN_ON_STARTUP")
     source_urls: tuple[AnyHttpUrl, ...] = (
         "https://www.oagkenya.go.ke",
