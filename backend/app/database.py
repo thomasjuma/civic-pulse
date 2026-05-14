@@ -69,5 +69,26 @@ def init_db(settings: Settings | None = None) -> None:
                 FOREIGN KEY(subscriber_id) REFERENCES subscribers(id) ON DELETE CASCADE,
                 UNIQUE(article_id, subscriber_id)
             );
+
+            CREATE TABLE IF NOT EXISTS chat_conversations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                subscriber_id INTEGER NOT NULL,
+                article_id INTEGER NOT NULL,
+                started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(subscriber_id) REFERENCES subscribers(id) ON DELETE CASCADE,
+                FOREIGN KEY(article_id) REFERENCES articles(id) ON DELETE CASCADE,
+                UNIQUE(subscriber_id, article_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS chat_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                conversation_id INTEGER NOT NULL,
+                role TEXT NOT NULL CHECK(role IN ('user', 'assistant')),
+                content TEXT NOT NULL,
+                whatsapp_message_id TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(conversation_id) REFERENCES chat_conversations(id) ON DELETE CASCADE
+            );
             """
         )

@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import get_settings
 from app.database import init_db
 from app.routes.articles import router as articles_router
+from app.routes.chat import router as chat_router
 from app.routes.ingestion import router as ingestion_router
 from app.routes.subscribers import router as subscribers_router
 from app.services.scheduler import SummaryScheduler
@@ -58,6 +59,7 @@ app.add_middleware(
 app.include_router(articles_router)
 app.include_router(ingestion_router)
 app.include_router(subscribers_router)
+app.include_router(chat_router)
 
 
 @app.get("/health")

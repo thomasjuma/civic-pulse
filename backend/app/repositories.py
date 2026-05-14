@@ -149,16 +149,129 @@ def list_consenting_subscribers(connection: sqlite3.Connection, article_id: int)
     return [_subscriber_from_row(row) for row in rows]
 
 
+def get_subscriber_by_whatsapp_number(
+    connection: sqlite3.Connection,
+    whatsapp_number: str,
+) -> Subscriber | None:
+    normalized_number = whatsapp_number.replace("+", "").replace(" ", "").replace("-", "")
+    row = connection.execute(
+        """
+        SELECT id, clerk_user_id, email, whatsapp_number, has_whatsapp_consent, consented_at
+        FROM subscribers
+        WHERE whatsapp_number = ?
+           OR REPLACE(REPLACE(REPLACE(whatsapp_number, '+', ''), ' ', ''), '-', '') = ?
+        """,
+        (whatsapp_number, normalized_number),
+    ).fetchone()
+    return _subscriber_from_row(row) if row else None
+
+
+def get_latest_notified_article_for_subscriber(
+    connection: sqlite3.Connection,
+    subscriber_id: int,
+) -> Article | None:
+    row = connection.execute(
+        """
+        SELECT articles.id, articles.title, articles.source, articles.source_url,
+               articles.summary, articles.full_text, articles.date, articles.image
+        FROM article_notifications
+        JOIN articles ON articles.id = article_notifications.article_id
+        WHERE article_notifications.subscriber_id = ?
+        ORDER BY article_notifications.sent_at DESC, article_notifications.id DESC
+        LIMIT 1
+        """,
+        (subscriber_id,),
+    ).fetchone()
+    return _article_from_row(row) if row else None
+
+
+def get_or_create_chat_conversation(
+    connection: sqlite3.Connection,
+    subscriber_id: int,
+    article_id: int,
+) -> int:
+    now = _utc_now()
+    connection.execute(
+        """
+        INSERT INTO chat_conversations (subscriber_id, article_id, started_at, updated_at)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(subscriber_id, article_id)
+        DO UPDATE SET updated_at = excluded.updated_at
+        """,
+        (subscriber_id, article_id, now, now),
+    )
+    row = connection.execute(
+        """
+        SELECT id
+        FROM chat_conversations
+        WHERE subscriber_id = ? AND article_id = ?
+        """,
+        (subscriber_id, article_id),
+    ).fetchone()
+    if row is None:
+        raise RuntimeError("Chat conversation upsert failed")
+    return int(row["id"])
+
+
+def list_chat_messages(
+    connection: sqlite3.Connection,
+    conversation_id: int,
+    limit: int = 10,
+) -> list[dict[str, str]]:
+    rows = connection.execute(
+        """
+        SELECT role, content
+        FROM chat_messages
+        WHERE conversation_id = ?
+        ORDER BY id DESC
+        LIMIT ?
+        """,
+        (conversation_id, limit),
+    ).fetchall()
+    return [{"role": row["role"], "content": row["content"]} for row in reversed(rows)]
+
+
+def add_chat_message(
+    connection: sqlite3.Connection,
+    conversation_id: int,
+    role: str,
+    content: str,
+    whatsapp_message_id: str | None = None,
+) -> None:
+    connection.execute(
+        """
+        INSERT INTO chat_messages (conversation_id, role, content, whatsapp_message_id)
+        VALUES (?, ?, ?, ?)
+        """,
+        (conversation_id, role, content, whatsapp_message_id),
+    )
+    connection.execute(
+        """
+        UPDATE chat_conversations
+        SET updated_at = ?
+        WHERE id = ?
+        """,
+        (_utc_now(), conversation_id),
+    )
+
+
 def mark_article_notification_sent(
     connection: sqlite3.Connection,
     article_id: int,
     subscriber_id: int,
 ) -> None:
+    now = _utc_now()
     connection.execute(
         """
-        INSERT OR IGNORE INTO article_notifications (article_id, subscriber_id)
-        VALUES (?, ?)
+        INSERT OR IGNORE INTO article_notifications (article_id, subscriber_id, sent_at)
+        VALUES (?, ?, ?)
         """,
-        (article_id, subscriber_id),
+        (article_id, subscriber_id, now),
     )
-
+    connection.execute(
+        """
+        INSERT OR IGNORE INTO chat_conversations (subscriber_id, article_id, started_at, updated_at)
+        VALUES (?, ?, ?, ?)
+        """,
+        (subscriber_id, article_id, now, now),
+    )

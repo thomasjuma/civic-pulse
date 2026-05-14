@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     whatsapp_access_token: str | None = Field(default=None, alias="WHATSAPP_ACCESS_TOKEN")
     whatsapp_phone_number_id: str | None = Field(default=None, alias="WHATSAPP_PHONE_NUMBER_ID")
     whatsapp_api_version: str = Field(default="v20.0", alias="WHATSAPP_API_VERSION")
+    whatsapp_verify_token: str | None = Field(default=None, alias="WHATSAPP_VERIFY_TOKEN")
     database_path: Path = Field(default=BACKEND_ROOT / "civic_pulse.db", alias="DATABASE_PATH")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     summary_job_interval_minutes: int = Field(default=10, alias="SUMMARY_JOB_INTERVAL_MINUTES")
