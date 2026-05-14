@@ -78,9 +78,10 @@ async def test_retrieve_latest_documents_runs_agent(monkeypatch: pytest.MonkeyPa
 
     class FakeRunner:
         @staticmethod
-        async def run(agent: FakeAgent, prompt: str):
+        async def run(agent: FakeAgent, prompt: str, max_turns: int):
             assert agent.kwargs["mcp_servers"] == ["active-server"]
             assert "https://example.test" in prompt
+            assert max_turns == 20
             return types.SimpleNamespace(final_output=_valid_payload())
 
     class FakeMCPServerManager:
@@ -114,7 +115,8 @@ async def test_retrieve_latest_documents_reraises_agent_errors(monkeypatch: pyte
 
     class FakeRunner:
         @staticmethod
-        async def run(agent: FakeAgent, prompt: str):
+        async def run(agent: FakeAgent, prompt: str, max_turns: int):
+            assert max_turns == 20
             raise RuntimeError("agent failed")
 
     class FakeMCPServerManager:

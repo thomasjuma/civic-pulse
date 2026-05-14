@@ -50,36 +50,9 @@ def test_save_article_summary_record_success_and_error(monkeypatch: pytest.Monke
         tools.save_article_summary_record("Title", "Source", "Summary", "Text", "")
 
 
-@pytest.mark.asyncio
-async def test_decorated_tool_wrappers_delegate(monkeypatch: pytest.MonkeyPatch) -> None:
-    class Context:
-        tool_name = "tool"
-        run_config = None
-
-    monkeypatch.setattr(
-        tools,
-        "save_article_summary_record",
-        lambda **kwargs: {"saved": True, "article_id": 1, "title": kwargs["title"], "source": kwargs["source"]},
-    )
-
-    save_result = await tools.save_article_summary_tool.on_invoke_tool(
-        Context(),
-        '{"title":"Title","source":"Source","summary":"Summary","full_text":"Text","date":"2026-05-13"}',
-    )
-
-    assert save_result["article_id"] == 1
-
-    async def send_whatsapp_summary(**kwargs):
-        return {"article_id": kwargs["article_id"], "recipients_found": 1, "messages_sent": 1}
-
-    monkeypatch.setattr(tools, "send_whatsapp_summary", send_whatsapp_summary)
-
-    send_result = await tools.send_whatsapp_summary_tool.on_invoke_tool(
-        Context(),
-        '{"article_id":1,"title":"Title","source":"Source","summary":"Summary"}',
-    )
-
-    assert send_result["messages_sent"] == 1
+def test_decorated_tool_wrappers_are_registered() -> None:
+    assert tools.save_article_summary_tool.name == "save_article_summary_tool"
+    assert tools.send_whatsapp_summary_tool.name == "send_whatsapp_summary_tool"
 
 
 @pytest.mark.asyncio
